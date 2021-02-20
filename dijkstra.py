@@ -1,7 +1,10 @@
 import pandas as pd
 import math
 import sys
-
+import time
+from PyQt5 import QtCore, QtGui, QtWidgets, uic
+from PyQt5.QtWidgets import *
+import matplotlib.pyplot as plt
 stations = {}
 
 
@@ -33,7 +36,7 @@ class Doubly_linked_list:
         new_node.prev = current
         return
 
-    # get the value of the node at index (idx)
+    # get the value of the node
     def get_node(self, idx):
         cnt = 0
         current = self.head
@@ -113,7 +116,7 @@ def min_dist_node(dist, vis, num_nodes):
     return selected_node
 
 
-# Get the shortest path from source to destination
+# returns the shortest path from source to destination
 def get_path(prev, node, source):
     current = node
     path = [get_station_name(node)]
@@ -127,9 +130,9 @@ def get_path(prev, node, source):
 def dijkstra(graph, source, destination):
 
     # initializing
-    dist = [sys.maxsize] * graph.V
-    dist[source] = 0
-    vis = [False] * graph.V
+    dist = [sys.maxsize] * graph.V #assigning each node to infinity
+    dist[source] = 0 #the source distance intialised as 0
+    vis = [False] * graph.V#intialisting a visited list
     prev = [None] * graph.V
 
     # iterating over the nodes
@@ -140,12 +143,14 @@ def dijkstra(graph, source, destination):
         # relaxation
         for j in range(graph.get_num_neighbors(u)):
             v = graph.get_node(u, j)
-            if not vis[v[0]] and dist[v[0]] > dist[u] + v[1]:
+            if not vis[v[0]] and dist[v[0]] > dist[u] + v[1]:#if the distance of the node is greater than the distance between the 2 nodes plus the distance to the source node
                 dist[v[0]] = dist[u] + v[1]
-                prev[v[0]] = u
+                prev[v[0]] = u  #for each node we store the previous node, so we can go backwards also, so we use it to get the path
 
     path = get_path(prev, destination, source)
+    # returns the path, and the dist (time taken) for the journey
     return path, dist
+
 
 
 # Get a station name depending on its index
@@ -168,26 +173,181 @@ def load_data():
     df.columns = range(4)
     for idx, row in df.iterrows():
         row[1] = row[1].strip()
-        if idx == 208:
-            row[0] = "Circle"
-        row[0] = row[0].strip()
-        if math.isnan(row[3]):
+        if math.isnan(row[3]):#checks for duplicate stations and wether the third column is empty
             if row[1] not in stations:
                 stations[row[1]] = (cnt, row[0])
                 cnt += 1
             lines[stations[row[1]][0]].append(row[0])
-        else:
-            row[2] = row[2].strip()
+        else: #If there is something in the 3rd column you add edge
+            row[2] = row[2].strip()#stripping of whitespace
+            # Adding the connection to the graph
             graph.add_edge(stations[row[1]][0], (stations[row[2]][0], row[3]))
             graph.add_edge(stations[row[2]][0], (stations[row[1]][0], row[3]))
+
     return graph, lines
 
 
-# Main function
-def main():
+
+#############################################GUI#################################
+# Get the correct lines along the shortest path
+def get_journey_lines(lines, path, first_line, last_line):
+    path_lines = []
+    changes = []
+    current_line = first_line
+    change_idx = 0
+    for idx in range(len(path)):
+        node = path[idx]
+        if idx == len(path) - 1:
+            if current_line != last_line:
+                for i in range(change_idx, len(path) - 1):
+                    path_lines[i] = last_line
+                path_lines.append(last_line)
+                break
+        if current_line in lines[stations[node][0]]:
+            path_lines.append(current_line)
+        else:
+            path_lines.append(stations[node][1])
+            current_line = stations[node][1]
+            change_idx = idx
+            changes.append(change_idx)
+    return path_lines, changes
+
+
+# Write the journey summary
+def write_summary(path, path_lines, changes):
+    dlg.summary.setText("")
+    current = path[0]
+    summary = "Journey summary:\n"
+    for idx in range(len(path)):
+        if idx in changes:
+            summary += f"{path_lines[idx-1]}: from {current} to {path[idx-1]}\n"
+            summary += f"change\n"
+            current = path[idx-1]
+        if idx == len(path) - 1:
+            summary += f"{path_lines[idx]}: from {current} to {path[idx]}"
+    dlg.summary.setText(summary)
+    dlg.summary.adjustSize()
+
+
+# Run dijkstra's algorithm on the given inputs
+def run_dijkstra(graph, lines):
+    # getting text input from user
+    source = str(dlg.travel_from.currentText())
+    destination = str(dlg.travel_to.currentText())
+    first_line = str(dlg.source_line.currentText())
+    last_line = str(dlg.destination_line.currentText())
+    path, dist = dijkstra(graph, stations[source][0], stations[destination][0])
+    print("The shortest path is", path)
+    for i in range(len(path) - 1):
+        print(f"{i + 1}: from {path[i]} to {path[i + 1]}. time: {graph.get_node_by_name(stations[path[i]][0], path[i + 1])[1]}")
+    print(f"The total trip time from {source} to {destination} is {dist[stations[destination][0]] + len(path) - 1} Minutes")
+
+    clear_table()
+    path_lines, changes = get_journey_lines(lines, path, first_line, last_line)
+
+    total = 0
+    for i in range(len(path)):
+        if i == len(path) - 1:
+            time = ""
+        else:
+            time = graph.get_node_by_name(stations[path[i]][0], path[i + 1])[1]
+        add_row([path[i], path_lines[i], time, total])
+        time = 0 if time == "" else time
+        total = total + time + 1
+
+    adjust_sizes()
+
+    write_summary(path, path_lines, changes)
+    dlg.total_time.adjustSize()
+    dlg.total_time.setText(f"The total trip time from {source} to {destination} is {dist[stations[destination][0]] + len(path) - 1} Minutes")
+    dlg.total_time.adjustSize()
+
+
+# Clear the contents of the table after query
+def clear_table():
+    for i in range(dlg.table.rowCount()):
+        dlg.table.removeRow(dlg.table.rowCount()-1)
+
+
+# Add a row to the table to present the path
+def add_row(lst):
+    rowPosition = dlg.table.rowCount()
+    dlg.table.insertRow(rowPosition)
+    for i in range(4):
+        dlg.table.setItem(rowPosition, i, QTableWidgetItem(str(lst[i])))
+
+
+# Loading the data and stations to the input fields
+def load_stations():
     graph, lines = load_data()
-    dijkstra(graph, stations["Maida Vale"][0], stations["Westbourne Park"][0])
+    for station in sorted(stations):
+        dlg.travel_from.addItem(station)
+        dlg.travel_to.addItem(station)
+    lst = []
+    for item in lines:
+        for line in item:
+            lst.append(line)
+    for i in sorted(list(set(lst))):
+        dlg.source_line.addItem(i)
+        dlg.destination_line.addItem(i)
+    dlg.travel_from.adjustSize()
+    dlg.travel_to.adjustSize()
+    dlg.destination_line.adjustSize()
+    dlg.source_line.adjustSize()
+    return graph, lines
 
 
-if __name__ == "__main__":
+# Adjusting the sizes of the elements to fit data
+def adjust_sizes():
+    dlg.label.adjustSize()
+    dlg.label_3.adjustSize()
+    dlg.label_2.adjustSize()
+    dlg.label_4.adjustSize()
+    header = dlg.table.horizontalHeader()
+    header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+    header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+    dlg.table.adjustSize()
+
+
+# main function to run
+def main():
+    # to print doubly linked list used in graph
+    plt.ion()
+    graph, lines = load_data()
+    #graph.print_graph()
+    timeList=[]
+    x=[x for x in range(100)]
+    for i in range(100):
+        t1= time.time()
+        dijkstra(graph,stations['Maida Vale'][0], stations['Westbourne Park'][0])
+        t2=time.time()
+        timeList.append(t2-t1)
+    print(timeList)
+    fig=plt.figure()
+    #ax=fig.add_axes([0,0,1,1])
+    plt.plot(x,timeList,lw=3,marker='o')
+    import numpy as np
+    y_ticks=np.arange(0,0.4,0.05)
+    plt.yticks(y_ticks)
+    plt.show(block=True)
+    # graph, lines = load_stations()
+    # dlg.button.clicked.connect(lambda: run_dijkstra(graph, lines))
+    # print(stations)
+
+if __name__ == '__main__':
+    # if hasattr(QtCore.Qt, 'AA_EnableHighDpiScaling'):
+    #     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    #
+    # if hasattr(QtCore.Qt, 'AA_UseHighDpiPixmaps'):
+    #     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
+    # app = QtWidgets.QApplication([])
+    # dlg = uic.loadUi("gui.ui")
+    # for i in range(5):
+    #     rowPosition = dlg.table.rowCount()
+    #     dlg.table.insertRow(rowPosition)
+    #
+    # clear_table()
     main()
+    # dlg.show()
+    # app.exec()
+

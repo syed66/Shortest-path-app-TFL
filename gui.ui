@@ -29,7 +29,7 @@
          <rect>
           <x>50</x>
           <y>110</y>
-          <width>601</width>
+          <width>741</width>
           <height>231</height>
          </rect>
         </property>
@@ -41,7 +41,7 @@
         </property>
         <property name="maximumSize">
          <size>
-          <width>601</width>
+          <width>750</width>
           <height>231</height>
          </size>
         </property>
@@ -55,7 +55,7 @@
          <bool>true</bool>
         </attribute>
         <attribute name="horizontalHeaderDefaultSectionSize">
-         <number>70</number>
+         <number>180</number>
         </attribute>
         <attribute name="horizontalHeaderStretchLastSection">
          <bool>false</bool>
@@ -81,12 +81,12 @@
          </property>
         </column>
        </widget>
-       <widget class="QWidget" name="">
+       <widget class="QWidget" name="layoutWidget">
         <property name="geometry">
          <rect>
           <x>50</x>
           <y>20</y>
-          <width>377</width>
+          <width>415</width>
           <height>51</height>
          </rect>
         </property>
